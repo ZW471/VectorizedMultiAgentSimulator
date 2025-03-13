@@ -343,7 +343,6 @@ class Scenario(BaseScenario):
                 {
                     "rot": agent.state.rot,
                     "ang_vel": agent.state.ang_vel,
-                    # "frame": agent.state.frame,
                 }
             )
         return obs
@@ -357,3 +356,32 @@ class Scenario(BaseScenario):
             "final_rew": self.final_rew,
             "agent_collision_rew": agent.agent_collision_rew,
         }
+
+    def extra_render(self, env_index: int = 0) -> "List[Geom]":
+        from vmas.simulator import rendering
+
+        geoms = [
+            ScenarioUtils.plot_entity_rotation(agent, env_index)
+            for agent in self.world.agents
+            if not isinstance(agent.dynamics, Holonomic)
+        ]  # Plot the rotation for non-holonomic agents
+
+        # Plot communication lines
+        if self.comms_rendering_range > 0:
+            for i, agent1 in enumerate(self.world.agents):
+                for j, agent2 in enumerate(self.world.agents):
+                    if j <= i:
+                        continue
+                    agent_dist = torch.linalg.vector_norm(
+                        agent1.state.pos - agent2.state.pos, dim=-1
+                    )
+                    if agent_dist[env_index] <= self.comms_rendering_range:
+                        color = Color.BLACK.value
+                        line = rendering.Line(
+                            (agent1.state.pos[env_index]),
+                            (agent2.state.pos[env_index]),
+                            width=1,
+                        )
+                        line.set_color(*color)
+                        geoms.append(line)
+        return geoms
