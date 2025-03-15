@@ -366,7 +366,8 @@ class ScenarioUtils:
     def plot_entity_rotation(entity, env_index: int, length: float = 0.15) -> "Geom":
         from vmas.simulator import rendering
 
-        color = entity.color
+        # color = entity.color
+        color = (0, 0, 0)
         line = rendering.Line(
             (0, 0),
             (length, 0),

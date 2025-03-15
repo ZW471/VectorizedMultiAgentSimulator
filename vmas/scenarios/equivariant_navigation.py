@@ -24,12 +24,13 @@ def localize(rotation: torch.Tensor):
     y = torch.sin(rotation)
     frame = torch.cat(
         [
+            torch.stack([y, -x], dim=-1),
             torch.stack([x, y], dim=-1),
-            torch.stack([-y, x], dim=-1),
         ],
         dim=-2,
     )
     return frame
+
 
 class Scenario(BaseScenario):
     def make_world(self, batch_dim: int, device: torch.device, **kwargs):
@@ -85,8 +86,7 @@ class Scenario(BaseScenario):
             0.005  # Minimum distance between entities for collision trigger
         )
 
-        ScenarioUtils.check_kwargs_consumed(kwargs) # Warn is not all kwargs have been consumed
-
+        ScenarioUtils.check_kwargs_consumed(kwargs)  # Warn is not all kwargs have been consumed
 
         ################
         # Make world
@@ -172,7 +172,7 @@ class Scenario(BaseScenario):
                 max_steering_angle = torch.pi / 4
                 width = self.agent_radius
                 agent = Agent(
-                    name=f"car_{i-self.n_agents_holonomic-self.n_agents_diff_drive}",
+                    name=f"car_{i - self.n_agents_holonomic - self.n_agents_diff_drive}",
                     collide=True,
                     color=color,
                     render_action=True,
@@ -247,14 +247,14 @@ class Scenario(BaseScenario):
             self.min_distance_between_entities,
             x_bounds=(-self.world_spawning_x, self.world_spawning_x),
             y_bounds=(-self.world_spawning_y, self.world_spawning_y),
-            )
+        )
 
         for agent in self.world.agents:
             if env_index is None:
                 agent.goal_dist = torch.linalg.vector_norm(
                     agent.state.pos - agent.goal.state.pos,
                     dim=-1,
-                    )  # Tensor holding the distance of the agent to the goal, we will use it to compute the reward
+                )  # Tensor holding the distance of the agent to the goal, we will use it to compute the reward
             else:
                 agent.goal_dist[env_index] = torch.linalg.vector_norm(
                     agent.state.pos[env_index] - agent.goal.state.pos[env_index]
@@ -274,7 +274,7 @@ class Scenario(BaseScenario):
                 distance_to_goal = torch.linalg.vector_norm(
                     a.state.pos - a.goal.state.pos,
                     dim=-1,
-                    )
+                )
                 a.on_goal = distance_to_goal < a.shape.circumscribed_radius()
 
                 # The positional reward is the delta in distance to the goal.
@@ -318,22 +318,34 @@ class Scenario(BaseScenario):
         pos_reward = (
             self.pos_rew if self.shared_rew else agent.pos_rew
         )  # Choose global or local reward based on configuration
+
+        # if not isinstance(agent.dynamics, Holonomic):
+        #     heading = torch.stack([torch.cos(agent.state.rot), torch.sin(agent.state.rot)], dim=-1)
+        #     direction_to_goal = agent.goal.state.pos - agent.state.pos
+        #     norm_direction = direction_to_goal / torch.linalg.vector_norm(direction_to_goal, dim=-1, keepdim=True)
+        #     alignment = torch.bmm(heading, norm_direction.unsqueeze(-1)).squeeze(-1).squeeze(-1)  # cosine similarity
+        #     alignment_reward = alignment * agent.state.speed.squeeze(-1)
+        # else:
+        #     alignment_reward = 0.0
+
         return pos_reward + self.final_rew + agent.agent_collision_rew
 
     def observation(self, agent: Agent):
 
         agent.state.frame = localize(agent.state.rot)
 
-        speed = torch.linalg.vector_norm(agent.state.vel, dim=-1, keepdim=True)
-        rel_goal_pos = torch.bmm(agent.goal.state.pos.unsqueeze(1), agent.state.frame).squeeze(1)
+        # agent.state.speed = torch.linalg.vector_norm(agent.state.vel, dim=-1, keepdim=True)
+        localized_vel = torch.bmm(agent.state.vel.unsqueeze(1), agent.state.frame).squeeze(1)
+        rel_goal_pos = torch.bmm((agent.goal.state.pos - agent.state.pos).unsqueeze(1), agent.state.frame).squeeze(1)
+        # rel_goal_pos = agent.goal.state.pos - agent.state.pos
         collision_obs = torch.cat([sensor._max_range - sensor.measure() for sensor in agent.sensors], dim=-1)
 
         obs = {
             "obs": torch.cat([
-                 speed,
-                 rel_goal_pos,
-                 collision_obs
-             ], dim=-1),
+                localized_vel,
+                rel_goal_pos,
+                collision_obs
+            ], dim=-1),
             "pos": agent.state.pos,
             "vel": agent.state.vel,
         }
@@ -361,10 +373,51 @@ class Scenario(BaseScenario):
         from vmas.simulator import rendering
 
         geoms = [
-            ScenarioUtils.plot_entity_rotation(agent, env_index)
+            ScenarioUtils.plot_entity_rotation(agent, env_index, length=self.agent_radius * 2)
             for agent in self.world.agents
             if not isinstance(agent.dynamics, Holonomic)
         ]  # Plot the rotation for non-holonomic agents
+
+        # plot frames
+        for a in self.world.agents:
+            frame_x, frame_y = a.state.frame[env_index, 0], a.state.frame[env_index, 1]
+            frame_x = frame_x * self.agent_radius * 1.25
+            frame_y = frame_y * self.agent_radius * 1.25
+            frame_x = frame_x + a.state.pos[env_index]
+            frame_y = frame_y + a.state.pos[env_index]
+            line = rendering.Line(
+                (a.state.pos[env_index]),
+                frame_x,
+                width=2,
+            )
+            line.set_color(*Color.RED.value)
+            geoms.append(line)
+            line = rendering.Line(
+                (a.state.pos[env_index]),
+                frame_y,
+                width=2,
+            )
+            line.set_color(*Color.BLUE.value)
+            geoms.append(line)
+
+        # plot forces (actions)
+        for a in self.world.agents:
+            action = a.action.u[env_index]
+            line = rendering.Line(
+                (a.state.pos[env_index]),
+                (a.state.pos[env_index] + action * self.agent_radius * 10),
+                width=8,
+            )
+            line.set_color(*Color.PURPLE.value)
+            geoms.append(line)
+            action = action @ a.state.frame[env_index].T
+            line = rendering.Line(
+                (a.state.pos[env_index]),
+                (a.state.pos[env_index] + action * self.agent_radius * 10),
+                width=8,
+            )
+            line.set_color(*Color.PINK.value)
+            geoms.append(line)
 
         # Plot communication lines
         if self.comms_rendering_range > 0:
@@ -385,3 +438,6 @@ class Scenario(BaseScenario):
                         line.set_color(*color)
                         geoms.append(line)
         return geoms
+
+    def process_action(self, agent: Agent):
+        agent.action.u = torch.bmm(agent.action.u.unsqueeze(1), agent.state.frame).squeeze(1)
