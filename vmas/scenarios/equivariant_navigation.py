@@ -18,19 +18,26 @@ if typing.TYPE_CHECKING:
     from vmas.simulator.rendering import Geom
 from vmas.scenarios.navigation import Scenario as NavigationScenario
 
-
-def localize(rotation: torch.Tensor):
-    x = torch.cos(rotation)
-    y = torch.sin(rotation)
+def local_frame(rotation):
+    c = torch.cos(rotation)
+    s = torch.sin(rotation)
+    # For row vectors, use R(-theta)^T = [[cos, -sin], [sin, cos]]
     frame = torch.cat(
         [
-            torch.stack([y, -x], dim=-1),
-            torch.stack([x, y], dim=-1),
+            torch.stack([c, -s], dim=-1),
+            torch.stack([s, c], dim=-1)
         ],
         dim=-2,
     )
     return frame
 
+def localize(pos, frame, center=None):
+    if center is not None:
+        pos = pos - center
+    return torch.bmm(
+        pos.unsqueeze(1),
+        frame,
+    ).squeeze(1)
 
 class Scenario(BaseScenario):
     def make_world(self, batch_dim: int, device: torch.device, **kwargs):
@@ -94,7 +101,7 @@ class Scenario(BaseScenario):
         world = World(
             batch_dim,  # Number of environments simulated
             device,  # Device for simulation
-            substeps=5,  # Number of physical substeps (more yields more accurate but more expensive physics)
+            substeps=2,  # Number of physical substeps (more yields more accurate but more expensive physics)
             collision_force=500,  # Paramneter to tune for collisions
             dt=0.1,  # Simulation timestep
             gravity=(0.0, 0.0),  # Customizable gravity
@@ -115,7 +122,10 @@ class Scenario(BaseScenario):
             Color.PURPLE,
             Color.YELLOW,
             Color.RED,
-        ]  # Colors for the first 7 agents
+            Color.LIGHT_GREEN,
+            Color.BLACK,
+            Color.WHITE
+        ]  # Colors for the first 10 agents
         colors = torch.randn(
             (max(self.n_agents - len(known_colors), 0), 3), device=device
         )  # Other colors if we have more agents are random
@@ -332,18 +342,17 @@ class Scenario(BaseScenario):
 
     def observation(self, agent: Agent):
 
-        agent.state.frame = localize(agent.state.rot)
-
-        # agent.state.speed = torch.linalg.vector_norm(agent.state.vel, dim=-1, keepdim=True)
-        localized_vel = torch.bmm(agent.state.vel.unsqueeze(1), agent.state.frame).squeeze(1)
-        rel_goal_pos = torch.bmm((agent.goal.state.pos - agent.state.pos).unsqueeze(1), agent.state.frame).squeeze(1)
+        agent.state.frame = local_frame(agent.state.rot)
+        center = agent.state.pos
+        localized_vel = localize(agent.state.vel, agent.state.frame)
+        goal_pos = localize(agent.goal.state.pos, agent.state.frame, center=center)
         # rel_goal_pos = agent.goal.state.pos - agent.state.pos
         collision_obs = torch.cat([sensor._max_range - sensor.measure() for sensor in agent.sensors], dim=-1)
 
         obs = {
             "obs": torch.cat([
                 localized_vel,
-                rel_goal_pos,
+                goal_pos,
                 collision_obs
             ], dim=-1),
             "pos": agent.state.pos,
@@ -408,7 +417,7 @@ class Scenario(BaseScenario):
                 (a.state.pos[env_index] + action * self.agent_radius * 10),
                 width=8,
             )
-            line.set_color(*Color.PURPLE.value)
+            line.set_color(*Color.BLACK.value)
             geoms.append(line)
             action = action @ a.state.frame[env_index].T
             line = rendering.Line(
@@ -440,4 +449,5 @@ class Scenario(BaseScenario):
         return geoms
 
     def process_action(self, agent: Agent):
-        agent.action.u = torch.bmm(agent.action.u.unsqueeze(1), agent.state.frame).squeeze(1)
+        agent.action.u = localize(agent.action.u, agent.state.frame)
+        return
