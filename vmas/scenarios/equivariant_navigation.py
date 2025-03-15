@@ -39,6 +39,9 @@ def localize(pos, frame, center=None):
         frame,
     ).squeeze(1)
 
+def norm(vector):
+    return torch.linalg.norm(vector, dim=-1, keepdim=True)
+
 class Scenario(BaseScenario):
     def make_world(self, batch_dim: int, device: torch.device, **kwargs):
         ################
@@ -101,7 +104,7 @@ class Scenario(BaseScenario):
         world = World(
             batch_dim,  # Number of environments simulated
             device,  # Device for simulation
-            substeps=2,  # Number of physical substeps (more yields more accurate but more expensive physics)
+            substeps=5,  # Number of physical substeps (more yields more accurate but more expensive physics)
             collision_force=500,  # Paramneter to tune for collisions
             dt=0.1,  # Simulation timestep
             gravity=(0.0, 0.0),  # Customizable gravity
@@ -345,18 +348,25 @@ class Scenario(BaseScenario):
         agent.state.frame = local_frame(agent.state.rot)
         center = agent.state.pos
         localized_vel = localize(agent.state.vel, agent.state.frame)
-        goal_pos = localize(agent.goal.state.pos, agent.state.frame, center=center)
+        localized_goal_pos = localize(agent.goal.state.pos, agent.state.frame, center=center)
         # rel_goal_pos = agent.goal.state.pos - agent.state.pos
         collision_obs = torch.cat([sensor._max_range - sensor.measure() for sensor in agent.sensors], dim=-1)
 
+        goal_distance = norm(localized_goal_pos)
+        speed = norm(localized_vel)
+
         obs = {
             "obs": torch.cat([
+                speed,
+                goal_distance,
+                agent.state.ang_vel,
                 localized_vel,
-                goal_pos,
+                localized_goal_pos,
                 collision_obs
             ], dim=-1),
             "pos": agent.state.pos,
-            "vel": agent.state.vel,
+            "goal_pos": localized_goal_pos,
+            "vel": localized_vel,
         }
         if not isinstance(agent.dynamics, Holonomic):
             # Non hoonomic agents need to know angular states
