@@ -426,21 +426,13 @@ class Scenario(BaseScenario):
 
         # plot forces (actions)
         for a in self.world.agents:
-            action = a.action.u[env_index]
+            action = a.action.u[env_index] @ a.state.frame[env_index]
             line = rendering.Line(
                 (a.state.pos[env_index]),
                 (a.state.pos[env_index] + action * self.agent_radius * 10),
                 width=8,
             )
             line.set_color(*Color.BLACK.value)
-            geoms.append(line)
-            action = action @ a.state.frame[env_index].T
-            line = rendering.Line(
-                (a.state.pos[env_index]),
-                (a.state.pos[env_index] + action * self.agent_radius * 10),
-                width=8,
-            )
-            line.set_color(*Color.PINK.value)
             geoms.append(line)
 
         # Plot communication lines
@@ -463,6 +455,3 @@ class Scenario(BaseScenario):
                         geoms.append(line)
         return geoms
 
-    def process_action(self, agent: Agent):
-        agent.action.u = localize(agent.action.u, agent.state.frame)
-        return
