@@ -369,8 +369,8 @@ class Scenario(BaseScenario):
             "goal_pos": localized_goal_pos,
             # "vel": localized_vel,
             "vel": torch.cat([
-                agent.state.vel,
-                agent.goal.state.pos - agent.state.pos
+                localized_vel,
+                localized_goal_pos,
             ], dim=1)
         }
         if not isinstance(agent.dynamics, Holonomic):
