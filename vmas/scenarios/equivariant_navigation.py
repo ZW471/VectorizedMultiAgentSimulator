@@ -360,13 +360,18 @@ class Scenario(BaseScenario):
                 speed,
                 goal_distance,
                 agent.state.ang_vel,
-                localized_vel,
-                localized_goal_pos,
+                # localized_vel,
+                # localized_goal_pos,
                 collision_obs
             ], dim=-1),
             "pos": agent.state.pos,
+            "frames": agent.state.frame.view(-1, 4),
             "goal_pos": localized_goal_pos,
-            "vel": localized_vel,
+            # "vel": localized_vel,
+            "vel": torch.cat([
+                agent.state.vel,
+                agent.goal.state.pos - agent.state.pos
+            ], dim=1)
         }
         if not isinstance(agent.dynamics, Holonomic):
             # Non hoonomic agents need to know angular states
