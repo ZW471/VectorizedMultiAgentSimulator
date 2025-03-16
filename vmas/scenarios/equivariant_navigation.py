@@ -48,7 +48,9 @@ class Scenario(BaseScenario):
         # Scenario configuration
         ################
         self.plot_grid = False  # You can use this to plot a grid under the rendering for visualization purposes
-
+        self.exclude_vel_from_obs = kwargs.pop(
+            "exclude_vel_from_obs", True
+        )
         self.n_agents_holonomic = kwargs.pop(
             "n_agents_holonomic", 2
         )  # Number of agents with holonomic dynamics
@@ -360,10 +362,11 @@ class Scenario(BaseScenario):
                 speed,
                 goal_distance,
                 agent.state.ang_vel,
-                # localized_vel,
-                # localized_goal_pos,
                 collision_obs
-            ], dim=-1),
+            ] + ([
+                localized_vel,
+                localized_goal_pos,
+            ] if not self.exclude_vel_from_obs else []), dim=-1),
             "pos": agent.state.pos,
             "frames": agent.state.frame.view(-1, 4),
             "goal_pos": localized_goal_pos,
@@ -424,7 +427,7 @@ class Scenario(BaseScenario):
             line.set_color(*Color.BLUE.value)
             geoms.append(line)
 
-        # plot forces (actions)
+        # plot actions
         for a in self.world.agents:
             action = a.action.u[env_index] @ a.state.frame[env_index]
             line = rendering.Line(
