@@ -49,7 +49,7 @@ class Scenario(BaseScenario):
         ################
         self.plot_grid = False  # You can use this to plot a grid under the rendering for visualization purposes
         self.exclude_vel_from_obs = kwargs.pop(
-            "exclude_vel_from_obs", True
+            "exclude_vel_from_obs", False
         )
         self.n_agents_holonomic = kwargs.pop(
             "n_agents_holonomic", 2
@@ -406,37 +406,37 @@ class Scenario(BaseScenario):
         ]  # Plot the rotation for non-holonomic agents
 
         # plot frames
-        for a in self.world.agents:
-            frame_x, frame_y = a.state.frame[env_index, 0], a.state.frame[env_index, 1]
-            frame_x = frame_x * self.agent_radius * 1.25
-            frame_y = frame_y * self.agent_radius * 1.25
-            frame_x = frame_x + a.state.pos[env_index]
-            frame_y = frame_y + a.state.pos[env_index]
-            line = rendering.Line(
-                (a.state.pos[env_index]),
-                frame_x,
-                width=2,
-            )
-            line.set_color(*Color.RED.value)
-            geoms.append(line)
-            line = rendering.Line(
-                (a.state.pos[env_index]),
-                frame_y,
-                width=2,
-            )
-            line.set_color(*Color.BLUE.value)
-            geoms.append(line)
+        # for a in self.world.agents:
+        #     frame_x, frame_y = a.state.frame[env_index, 0], a.state.frame[env_index, 1]
+        #     frame_x = frame_x * self.agent_radius * 1.25
+        #     frame_y = frame_y * self.agent_radius * 1.25
+        #     frame_x = frame_x + a.state.pos[env_index]
+        #     frame_y = frame_y + a.state.pos[env_index]
+        #     line = rendering.Line(
+        #         (a.state.pos[env_index]),
+        #         frame_x,
+        #         width=2,
+        #     )
+        #     line.set_color(*Color.RED.value)
+        #     geoms.append(line)
+        #     line = rendering.Line(
+        #         (a.state.pos[env_index]),
+        #         frame_y,
+        #         width=2,
+        #     )
+        #     line.set_color(*Color.BLUE.value)
+        #     geoms.append(line)
 
         # plot actions
-        for a in self.world.agents:
-            action = a.action.u[env_index] @ a.state.frame[env_index]
-            line = rendering.Line(
-                (a.state.pos[env_index]),
-                (a.state.pos[env_index] + action * self.agent_radius * 10),
-                width=8,
-            )
-            line.set_color(*Color.BLACK.value)
-            geoms.append(line)
+        # for a in self.world.agents:
+        #     action = a.action.u[env_index] @ a.state.frame[env_index]
+        #     line = rendering.Line(
+        #         (a.state.pos[env_index]),
+        #         (a.state.pos[env_index] + action * self.agent_radius * 10),
+        #         width=8,
+        #     )
+        #     line.set_color(*Color.BLACK.value)
+        #     geoms.append(line)
 
         # Plot communication lines
         if self.comms_rendering_range > 0:
