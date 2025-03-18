@@ -362,8 +362,9 @@ class Scenario(BaseScenario):
                 speed,
                 goal_distance,
                 agent.state.ang_vel,
-                collision_obs
             ] + ([
+                collision_obs
+            ] if agent.sensors[0]._max_range > 0 else [])+ ([
                 localized_vel,
                 localized_goal_pos,
             ] if not self.exclude_vel_from_obs else []), dim=-1),
